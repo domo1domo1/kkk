@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FILUSDT 실시간 포지션 수익률 트래커 | Binance Futures</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        binance: {
+                            bg: '#0B0E11',
+                            card: '#181A20',
+                            input: '#2B3139',
+                            border: '#2B3139',
+                            yellow: '#FCD535',
+                            yellowHover: '#F0B90B',
+                            green: '#0ECB81',
+                            red: '#F6465D',
+                            text: '#EAECEF',
+                            subtext: '#848E9C'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0B0E11;
+            color: #EAECEF;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        /* Custom Range Slider for Leverage */
+        input[type="range"] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 3px;
+            background: #2B3139;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #FCD535;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 8px rgba(252, 213, 53, 0.5);
+            transition: transform 0.1s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        /* Number input arrows hide */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+        .live-dot {
+            animation: pulse-dot 1.5s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-binance-yellow selection:text-black">
+
+    <!-- Toast Notification Container (Replaces alert()) -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-binance-border bg-binance-card/90 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <!-- FIL / Binance Style Badge -->
+                <div class="w-9 h-9 rounded-xl bg-binance-yellow/15 border border-binance-yellow/30 flex items-center justify-center text-binance-yellow font-bold font-mono text-sm">
+                    FIL
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-base sm:text-lg tracking-tight text-binance-text">FILUSDT <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-binance-input text-binance-subtext">무기한</span></h1>
+                    </div>
+                    <p class="text-xs text-binance-subtext hidden sm:block">바이낸스 선물 실시간 포지션 수익률 트래커</p>
+                </div>
+            </div>
+
+            <!-- Live Price & Connection Status -->
+            <div class="flex items-center gap-3 sm:gap-5">
+                <div class="text-right">
+                    <div class="flex items-center justify-end gap-1.5">
+                        <span id="status-dot" class="w-2 h-2 rounded-full bg-binance-yellow live-dot"></span>
+                        <span id="status-text" class="text-[11px] font-medium text-binance-subtext">연결 중...</span>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <span id="header-price" class="font-mono font-bold text-base sm:text-xl text-binance-text">$0.0000</span>
+                        <span id="header-24h" class="font-mono text-xs font-medium text-binance-subtext">0.00%</span>
+                    </div>
+                </div>
+
+                <button onclick="openDcaModal()" class="p-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-binance-yellow hover:bg-binance-yellowHover text-black font-semibold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-lg shadow-binance-yellow/10">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4"/></svg>
+                    <span>포지션 추매 계산기</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Content -->
+    <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 flex-grow">
+
+        <!-- Hero ROE & PnL Card -->
+        <section class="bg-binance-card border border-binance-border rounded-2xl p-5 sm:p-7 shadow-xl relative overflow-hidden">
+            <!-- Subtle Background Glow -->
+            <div id="hero-glow" class="absolute -right-20 -top-20 w-72 h-72 rounded-full bg-binance-green/5 blur-3xl pointer-events-none transition-colors duration-500"></div>
+
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                <!-- Left: Position Identity & ROE -->
+                <div class="space-y-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span id="badge-side" class="px-2.5 py-1 rounded-lg text-xs font-bold tracking-wide bg-binance-red/20 text-binance-red border border-binance-red/30">
+                            SHORT 숏
+                        </span>
+                        <span id="badge-leverage" class="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-binance-yellow/15 text-binance-yellow border border-binance-yellow/30">
+                            격리 8x
+                        </span>
+                        <span class="text-xs text-binance-subtext font-mono">
+                            진입가: <strong id="summary-entry" class="text-binance-text">$0.5541</strong>
+                        </span>
+                    </div>
+
+                    <div>
+                        <p class="text-xs sm:text-sm font-medium text-binance-subtext mb-1">실시간 수익률 (ROE %)</p>
+                        <div class="flex items-baseline gap-3 flex-wrap">
+                            <h2 id="display-roe" class="font-mono text-4xl sm:text-6xl font-extrabold tracking-tight text-binance-text transition-colors duration-200">
+                                0.00%
+                            </h2>
+                            <span id="display-price-diff" class="font-mono text-xs sm:text-sm px-2 py-1 rounded-lg bg-binance-input text-binance-subtext">
+                                변동 0.00%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Key Metrics Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 lg:min-w-[440px]">
+                    <!-- Estimated PnL -->
+                    <div class="bg-binance-bg/80 border border-binance-border rounded-xl p-3.5 sm:p-4">
+                        <p class="text-xs text-binance-subtext mb-1">예상 미실현 손익</p>
+                        <p id="display-pnl" class="font-mono text-lg sm:text-xl font-bold text-binance-text">+0.00 USDT</p>
+                        <p id="display-pnl-krw" class="text-[11px] text-binance-subtext font-mono mt-0.5">≈ 0 원</p>
+                    </div>
+
+                    <!-- Current Mark/Last Price -->
+                    <div class="bg-binance-bg/80 border border-binance-border rounded-xl p-3.5 sm:p-4">
+                        <p class="text-xs text-binance-subtext mb-1">바이낸스 현재가</p>
+                        <p id="display-current-price" class="font-mono text-lg sm:text-xl font-bold text-binance-text">$0.0000</p>
+                        <p id="display-mark-price" class="text-[11px] text-binance-subtext font-mono mt-0.5">시장평균: $0.0000</p>
+                    </div>
+
+                    <!-- Estimated Liquidation Price -->
+                    <div class="col-span-2 sm:col-span-1 bg-binance-bg/80 border border-binance-border rounded-xl p-3.5 sm:p-4">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-xs text-binance-subtext">예상 청산가</p>
+                            <span id="liq-distance" class="text-[11px] font-mono text-binance-yellow">--% 여유</span>
+                        </div>
+                        <p id="display-liq-price" class="font-mono text-lg sm:text-xl font-bold text-binance-yellow">$0.6200</p>
+                        <p class="text-[11px] text-binance-subtext mt-0.5">유지증거금률 반영 추정치</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visual Price Gauge Bar (Liquidation <-> Entry <-> Current) -->
+            <div class="mt-6 pt-5 border-t border-binance-border/70">
+                <div class="flex justify-between text-[11px] font-mono text-binance-subtext mb-2">
+                    <span id="gauge-left-label">수익 구간</span>
+                    <span>진입가: <strong id="gauge-entry-label" class="text-binance-text">$0.5541</strong></span>
+                    <span id="gauge-right-label" class="text-binance-red">청산 위험</span>
+                </div>
+                <div class="w-full h-2.5 bg-binance-bg rounded-full overflow-hidden relative border border-binance-border">
+                    <!-- Center Marker (Entry Price) -->
+                    <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/40 z-10"></div>
+                    <!-- Dynamic Bar -->
+                    <div id="roe-progress-bar" class="h-full bg-binance-green transition-all duration-300 rounded-full" style="width: 50%; margin-left: 0%;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Two Column Controls & Simulator -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Left Column: Position Settings Editor (7 cols) -->
+            <section class="lg:col-span-7 bg-binance-card border border-binance-border rounded-2xl p-5 sm:p-6 space-y-5">
+                <div class="flex items-center justify-between border-b border-binance-border pb-4">
+                    <div>
+                        <h3 class="font-bold text-base sm:text-lg text-binance-text">포지션 설정 및 수정</h3>
+                        <p class="text-xs text-binance-subtext mt-0.5">평단가, 레버리지, 증거금을 수정하면 자동 저장됩니다.</p>
+                    </div>
+                    <button onclick="resetToFriendDefault()" class="px-3 py-1.5 rounded-lg bg-binance-input hover:bg-binance-border text-xs font-medium text-binance-subtext hover:text-binance-text transition flex items-center gap-1.5" title="초기 설정(0.5541 / 8배 숏)으로 복원">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>초기값 복원 (0.5541 / 8x)</span>
+                    </button>
+                </div>
+
+                <!-- Position Side Toggle (Short vs Long) -->
+                <div>
+                    <label class="block text-xs font-medium text-binance-subtext mb-2">포지션 방향</label>
+                    <div class="grid grid-cols-2 gap-2 p-1 bg-binance-bg rounded-xl border border-binance-border">
+                        <button type="button" id="btn-side-short" onclick="setSide('SHORT')" class="py-2.5 rounded-lg text-sm font-bold transition bg-binance-red text-white shadow">
+                            숏 (Short / 공매도)
+                        </button>
+                        <button type="button" id="btn-side-long" onclick="setSide('LONG')" class="py-2.5 rounded-lg text-sm font-bold transition text-binance-subtext hover:text-binance-text">
+                            롱 (Long / 매수)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Entry Price & Margin Inputs -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Entry Price -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label for="input-entry" class="text-xs font-medium text-binance-subtext">진입 평단가 (USDT)</label>
+                            <button type="button" onclick="openDcaModal()" class="text-[11px] font-semibold text-binance-yellow hover:underline">+ 추매 평단 계산</button>
+                        </div>
+                        <div class="relative">
+                            <input type="number" id="input-entry" step="0.0001" min="0.0001" value="0.5541" oninput="handleInputChange()"
+                                class="w-full bg-binance-bg border border-binance-border focus:border-binance-yellow rounded-xl px-4 py-3 font-mono text-base font-bold text-binance-text outline-none transition">
+                            <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-binance-subtext">USDT</span>
+                        </div>
+                    </div>
+
+                    <!-- Margin (Collateral) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label for="input-margin" class="text-xs font-medium text-binance-subtext">투입 증거금 (선택사항)</label>
+                            <span id="position-size-label" class="text-[11px] font-mono text-binance-subtext">규모: 8,000 USDT</span>
+                        </div>
+                        <div class="relative">
+                            <input type="number" id="input-margin" step="10" min="1" value="1000" oninput="handleInputChange()"
+                                class="w-full bg-binance-bg border border-binance-border focus:border-binance-yellow rounded-xl px-4 py-3 font-mono text-base font-bold text-binance-text outline-none transition">
+                            <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-binance-subtext">USDT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leverage Slider & Direct Input -->
+                <div class="bg-binance-bg/60 border border-binance-border rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label for="input-leverage" class="text-xs font-medium text-binance-subtext">레버리지 배율 (1x ~ 75x)</label>
+                        <div class="flex items-center gap-1.5 bg-binance-input border border-binance-border rounded-lg px-2.5 py-1">
+                            <input type="number" id="input-leverage" min="1" max="75" value="8" oninput="syncLeverageFromInput()"
+                                class="w-12 bg-transparent font-mono text-sm font-bold text-binance-yellow text-right outline-none">
+                            <span class="font-mono text-xs font-bold text-binance-yellow">x</span>
+                        </div>
+                    </div>
+                    
+                    <input type="range" id="slider-leverage" min="1" max="75" value="8" oninput="syncLeverageFromSlider()" class="w-full">
+                    
+                    <div class="flex justify-between text-[11px] font-mono text-binance-subtext pt-1">
+                        <button type="button" onclick="setLeveragePreset(1)" class="hover:text-binance-yellow transition">1x</button>
+                        <button type="button" onclick="setLeveragePreset(5)" class="hover:text-binance-yellow transition">5x</button>
+                        <button type="button" onclick="setLeveragePreset(8)" class="text-binance-yellow font-bold">8x</button>
+                        <button type="button" onclick="setLeveragePreset(10)" class="hover:text-binance-yellow transition">10x</button>
+                        <button type="button" onclick="setLeveragePreset(20)" class="hover:text-binance-yellow transition">20x</button>
+                        <button type="button" onclick="setLeveragePreset(50)" class="hover:text-binance-yellow transition">50x</button>
+                        <button type="button" onclick="setLeveragePreset(75)" class="hover:text-binance-yellow transition">75x</button>
+                    </div>
+                </div>
+
+                <!-- Manual Price Override (Fallback / Testing) -->
+                <div class="pt-2 border-t border-binance-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="toggle-manual-price" onchange="toggleManualMode()" class="w-4 h-4 accent-binance-yellow rounded cursor-pointer">
+                        <label for="toggle-manual-price" class="text-xs text-binance-subtext cursor-pointer select-none">시세 수동 입력 모드 (네트워크 차단 시 사용)</label>
+                    </div>
+                    <div id="manual-price-box" class="hidden flex items-center gap-2">
+                        <input type="number" id="input-manual-price" step="0.0001" placeholder="현재가 직접 입력" oninput="handleManualPriceInput()"
+                            class="w-36 bg-binance-bg border border-binance-yellow/50 rounded-lg px-3 py-1.5 font-mono text-xs text-binance-text outline-none">
+                        <button type="button" onclick="reconnectBinance()" class="px-2.5 py-1.5 rounded-lg bg-binance-input text-xs text-binance-text hover:bg-binance-border">재연결</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Column: Target Price Simulator & Position Details (5 cols) -->
+            <section class="lg:col-span-5 flex flex-col justify-between bg-binance-card border border-binance-border rounded-2xl p-5 sm:p-6 space-y-5">
+                <div class="space-y-4">
+                    <div class="border-b border-binance-border pb-4">
+                        <h3 class="font-bold text-base sm:text-lg text-binance-text">목표가 수익률 시뮬레이터</h3>
+                        <p class="text-xs text-binance-subtext mt-0.5">FIL 가격이 특정 가격에 도달했을 때 예상 수익률을 미리 계산합니다.</p>
+                    </div>
+
+                    <!-- Target Price Input -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label for="input-target-price" class="text-xs font-medium text-binance-subtext">목표 FIL 가격 (USDT)</label>
+                            <div class="flex gap-1.5">
+                                <button type="button" onclick="adjustTargetPercent(-5)" class="px-2 py-0.5 rounded bg-binance-input hover:bg-binance-border font-mono text-[11px] text-binance-green">-5%</button>
+                                <button type="button" onclick="adjustTargetPercent(-10)" class="px-2 py-0.5 rounded bg-binance-input hover:bg-binance-border font-mono text-[11px] text-binance-green">-10%</button>
+                                <button type="button" onclick="adjustTargetPercent(5)" class="px-2 py-0.5 rounded bg-binance-input hover:bg-binance-border font-mono text-[11px] text-binance-red">+5%</button>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <input type="number" id="input-target-price" step="0.0001" value="0.5000" oninput="calculateTargetSim()"
+                                class="w-full bg-binance-bg border border-binance-border focus:border-binance-yellow rounded-xl px-4 py-3 font-mono text-base font-bold text-binance-text outline-none transition">
+                            <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-binance-subtext">USDT</span>
+                        </div>
+                    </div>
+
+                    <!-- Simulation Result Card -->
+                    <div class="bg-binance-bg border border-binance-border rounded-xl p-4 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-binance-subtext">목표가 도달 시 예상 수익률</span>
+                            <span id="sim-roe" class="font-mono text-xl font-extrabold text-binance-green">+78.11%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-binance-subtext">예상 실현 손익</span>
+                            <span id="sim-pnl" class="font-mono text-sm font-bold text-binance-green">+781.09 USDT</span>
+                        </div>
+                        <div class="flex justify-between items-center pt-2 border-t border-binance-border/60">
+                            <span class="text-xs text-binance-subtext">진입가 대비 변동폭</span>
+                            <span id="sim-price-change" class="font-mono text-xs text-binance-subtext">-9.76%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Position Summary Breakdown -->
+                <div class="bg-binance-bg/50 border border-binance-border/80 rounded-xl p-4 space-y-2 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-binance-subtext">총 포지션 규모 (Notional)</span>
+                        <span id="detail-notional" class="font-mono font-medium text-binance-text">8,000.00 USDT</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-binance-subtext">보유 계약 수량 (FIL)</span>
+                        <span id="detail-qty" class="font-mono font-medium text-binance-text">14,437.83 FIL</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-binance-subtext">손익분기점 (수수료 약 0.1% 감안)</span>
+                        <span id="detail-breakeven" class="font-mono font-medium text-binance-text">$0.5535</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-binance-border/60 py-4 px-4 sm:px-6 text-center text-xs text-binance-subtext">
+        <p>데이터 출처: Binance Futures Public API (FILUSDT) · 본 도구는 참고용 시뮬레이터이며 실제 거래소 정산 금액은 펀딩비 및 수수료에 따라 다를 수 있습니다.</p>
+    </footer>
+
+    <!-- DCA / Add Position Calculator Modal -->
+    <div id="dca-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-binance-card border border-binance-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-fade-in">
+            <div class="flex items-center justify-between border-b border-binance-border pb-3.5">
+                <div>
+                    <h3 class="font-bold text-lg text-binance-text">물타기 / 불타기 평단 계산기</h3>
+                    <p class="text-xs text-binance-subtext mt-0.5">추가 진입 가격과 증거금을 입력해 새 평단을 적용합니다.</p>
+                </div>
+                <button onclick="closeDcaModal()" class="p-1.5 rounded-lg text-binance-subtext hover:text-binance-text hover:bg-binance-input transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Current Position Snapshot -->
+            <div class="bg-binance-bg border border-binance-border rounded-xl p-3.5 text-xs space-y-1.5">
+                <div class="flex justify-between">
+                    <span class="text-binance-subtext">현재 평단가</span>
+                    <span id="dca-cur-entry" class="font-mono font-bold text-binance-text">$0.5541</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-binance-subtext">현재 증거금</span>
+                    <span id="dca-cur-margin" class="font-mono font-bold text-binance-text">1,000 USDT</span>
+                </div>
+            </div>
+
+            <!-- Additional Entry Inputs -->
+            <div class="space-y-3.5">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="dca-add-price" class="text-xs font-medium text-binance-subtext">추가 진입 가격 (USDT)</label>
+                        <button type="button" onclick="fillCurrentPriceToDca()" class="text-[11px] text-binance-yellow hover:underline">현재가로 채우기</button>
+                    </div>
+                    <input type="number" id="dca-add-price" step="0.0001" placeholder="예: 0.5800" oninput="previewDca()"
+                        class="w-full bg-binance-bg border border-binance-border focus:border-binance-yellow rounded-xl px-3.5 py-2.5 font-mono text-sm font-bold text-binance-text outline-none">
+                </div>
+
+                <div>
+                    <label for="dca-add-margin" class="block text-xs font-medium text-binance-subtext mb-1">추가 투입 증거금 (USDT)</label>
+                    <input type="number" id="dca-add-margin" step="10" placeholder="예: 1000" oninput="previewDca()"
+                        class="w-full bg-binance-bg border border-binance-border focus:border-binance-yellow rounded-xl px-3.5 py-2.5 font-mono text-sm font-bold text-binance-text outline-none">
+                </div>
+            </div>
+
+            <!-- Preview New Average -->
+            <div class="bg-binance-yellow/10 border border-binance-yellow/30 rounded-xl p-4 space-y-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-medium text-binance-yellow">변경 후 예상 평단가</span>
+                    <span id="dca-new-entry" class="font-mono text-lg font-extrabold text-binance-yellow">$0.5541</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                    <span class="text-binance-subtext">변경 후 총 증거금</span>
+                    <span id="dca-new-margin" class="font-mono text-binance-text">1,000 USDT</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2.5 pt-1">
+                <button type="button" onclick="closeDcaModal()" class="flex-1 py-2.5 rounded-xl bg-binance-input hover:bg-binance-border text-sm font-semibold text-binance-text transition">
+                    취소
+                </button>
+                <button type="button" onclick="applyDca()" class="flex-1 py-2.5 rounded-xl bg-binance-yellow hover:bg-binance-yellowHover text-sm font-bold text-black transition">
+                    새 평단 적용하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. State Management & Default Values
+        // ==========================================
+        const STORAGE_KEY = 'filusdt_position_tracker_v1';
+        
+        const DEFAULT_STATE = {
+            side: 'SHORT',       // 'SHORT' or 'LONG'
+            entryPrice: 0.5541,  // Friend's entry price
+            leverage: 8,         // Friend's leverage
+            margin: 1000,        // Default margin in USDT for PnL display
+            targetPrice: 0.5000  // Target price simulator default
+        };
+
+        let position = { ...DEFAULT_STATE };
+        let marketData = {
+            lastPrice: 0,
+            markPrice: 0,
+            priceChangePercent: 0,
+            isManual: false,
+            connectionMode: 'INIT' // 'WS', 'REST', 'MANUAL', 'ERROR'
+        };
+
+        let ws = null;
+        let pollingInterval = null;
+        let wsReconnectTimeout = null;
+        const APPROX_KRW_RATE = 1430; // Approximate USDT/KRW display helper
+
+        // ==========================================
+        // 2. Initialization & LocalStorage
+        // ==========================================
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    position = { ...DEFAULT_STATE, ...parsed };
+                }
+            } catch (e) {
+                console.warn('LocalStorage load failed:', e);
+            }
+            syncInputsWithState();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
+            } catch (e) {
+                console.warn('LocalStorage save failed:', e);
+            }
+        }
+
+        function syncInputsWithState() {
+            document.getElementById('input-entry').value = position.entryPrice;
+            document.getElementById('input-leverage').value = position.leverage;
+            document.getElementById('slider-leverage').value = position.leverage;
+            document.getElementById('input-margin').value = position.margin;
+            document.getElementById('input-target-price').value = position.targetPrice;
+            updateSideButtonsUI();
+        }
+
+        // ==========================================
+        // 3. Binance Real-Time Data Fetching (WS + REST Fallback)
+        // ==========================================
+        async function fetchInitialBinanceData() {
+            try {
+                // Fetch 24hr ticker & mark price in parallel
+                const [tickerRes, premiumRes] = await Promise.all([
+                    fetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=FILUSDT'),
+                    fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=FILUSDT')
+                ]);
+
+                if (!tickerRes.ok) throw new Error('REST API Error');
+
+                const tickerData = await tickerRes.json();
+                marketData.lastPrice = parseFloat(tickerData.lastPrice);
+                marketData.priceChangePercent = parseFloat(tickerData.priceChangePercent);
+
+                if (premiumRes.ok) {
+                    const premiumData = await premiumRes.json();
+                    marketData.markPrice = parseFloat(premiumData.markPrice);
+                } else {
+                    marketData.markPrice = marketData.lastPrice;
+                }
+
+                // If target price hasn't been customized yet and entry is 0.5541, keep sensible target
+                updateDashboard();
+            } catch (err) {
+                console.warn('Initial REST fetch failed, relying on WebSocket or fallback:', err);
+            }
+        }
+
+        function connectBinanceWebSocket() {
+            if (marketData.isManual) return;
+            cleanupConnections();
+
+            updateConnectionStatus('CONNECTING', '바이낸스 연결 중...');
+
+            try {
+                // Combined stream for real-time trades (last price) and markPrice
+                ws = new WebSocket('wss://fstream.binance.com/stream?streams=filusdt@aggTrade/filusdt@markPrice@1s');
+
+                ws.onopen = () => {
+                    marketData.connectionMode = 'WS';
+                    updateConnectionStatus('WS', '실시간 연동중 (WS)');
+                    if (pollingInterval) {
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    if (marketData.isManual) return;
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (!msg || !msg.data) return;
+
+                        if (msg.stream.includes('aggTrade')) {
+                            marketData.lastPrice = parseFloat(msg.data.p);
+                            if (!marketData.markPrice) marketData.markPrice = marketData.lastPrice;
+                            updateDashboard();
+                        } else if (msg.stream.includes('markPrice')) {
+                            marketData.markPrice = parseFloat(msg.data.p);
+                            if (!marketData.lastPrice) marketData.lastPrice = marketData.markPrice;
+                            updateDashboard();
+                        }
+                    } catch (parseErr) {
+                        // Ignore malformed frames
+                    }
+                };
+
+                ws.onerror = () => {
+                    startRestPollingFallback();
+                };
+
+                ws.onclose = () => {
+                    if (!marketData.isManual && marketData.connectionMode === 'WS') {
+                        startRestPollingFallback();
+                    }
+                };
+            } catch (e) {
+                startRestPollingFallback();
+            }
+        }
+
+        function startRestPollingFallback() {
+            if (marketData.isManual) return;
+            if (ws) {
+                try { ws.close(); } catch (e) {}
+                ws = null;
+            }
+
+            marketData.connectionMode = 'REST';
+            updateConnectionStatus('REST', '실시간 폴링중 (API)');
+
+            if (pollingInterval) clearInterval(pollingInterval);
+
+            const poll = async () => {
+                if (marketData.isManual) return;
+                try {
+                    const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=FILUSDT');
+                    if (!res.ok) throw new Error('Polling failed');
+                    const data = await res.json();
+                    marketData.lastPrice = parseFloat(data.price);
+                    if (!marketData.markPrice) marketData.markPrice = marketData.lastPrice;
+                    updateConnectionStatus('REST', '실시간 폴링중 (API)');
+                    updateDashboard();
+                } catch (err) {
+                    updateConnectionStatus('ERROR', '연결 지연 (수동입력 가능)');
+                }
+            };
+
+            poll();
+            pollingInterval = setInterval(poll, 2500);
+        }
+
+        function cleanupConnections() {
+            if (ws) {
+                try { ws.close(); } catch (e) {}
+                ws = null;
+            }
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            if (wsReconnectTimeout) {
+                clearTimeout(wsReconnectTimeout);
+                wsReconnectTimeout = null;
+            }
+        }
+
+        function updateConnectionStatus(type, text) {
+            const dot = document.getElementById('status-dot');
+            const label = document.getElementById('status-text');
+            label.textContent = text;
+
+            dot.className = 'w-2 h-2 rounded-full live-dot ';
+            if (type === 'WS') {
+                dot.className += 'bg-binance-green';
+                label.className = 'text-[11px] font-medium text-binance-green';
+            } else if (type === 'REST' || type === 'CONNECTING') {
+                dot.className += 'bg-binance-yellow';
+                label.className = 'text-[11px] font-medium text-binance-yellow';
+            } else if (type === 'MANUAL') {
+                dot.className = 'w-2 h-2 rounded-full bg-blue-400';
+                label.className = 'text-[11px] font-medium text-blue-400';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-binance-red';
+                label.className = 'text-[11px] font-medium text-binance-red';
+            }
+        }
+
+        // ==========================================
+        // 4. Core PnL, ROE & Liquidation Calculations
+        // ==========================================
+        function calculateMetrics(currentPrice, entryPrice, leverage, margin, side) {
+            if (!currentPrice || !entryPrice || entryPrice <= 0) {
+                return { roe: 0, pnl: 0, priceDiffPct: 0, liqPrice: 0, liqDistancePct: 0 };
+            }
+
+            // Price change percentage from entry
+            const rawDiff = (currentPrice - entryPrice) / entryPrice;
+            const priceDiffPct = rawDiff * 100;
+
+            // Directional multiplier: Short profits when price drops (-1), Long profits when price rises (+1)
+            const direction = side === 'SHORT' ? -1 : 1;
+
+            // ROE % = direction * ((current - entry) / entry) * leverage * 100
+            const roe = direction * rawDiff * leverage * 100;
+
+            // PnL (USDT) = margin * (roe / 100)
+            const pnl = margin * (roe / 100);
+
+            // Estimated Isolated Liquidation Price (assuming ~0.5% maintenance margin rate for FILUSDT)
+            const mmr = 0.005;
+            let liqPrice = 0;
+            if (side === 'SHORT') {
+                // Short liquidates when price rises: Entry * (1 + (1 / leverage) - mmr)
+                liqPrice = entryPrice * (1 + (1 / leverage) - mmr);
+            } else {
+                // Long liquidates when price falls: Entry * (1 - (1 / leverage) + mmr)
+                liqPrice = Math.max(0.0001, entryPrice * (1 - (1 / leverage) + mmr));
+            }
+
+            // Distance to liquidation (%) from current price
+            let liqDistancePct = 0;
+            if (side === 'SHORT') {
+                liqDistancePct = ((liqPrice - currentPrice) / currentPrice) * 100;
+            } else {
+                liqDistancePct = ((currentPrice - liqPrice) / currentPrice) * 100;
+            }
+
+            return { roe, pnl, priceDiffPct, liqPrice, liqDistancePct };
+        }
+
+        function updateDashboard() {
+            const price = marketData.lastPrice;
+            const mark = marketData.markPrice || price;
+
+            // Update Header Price
+            if (price > 0) {
+                document.getElementById('header-price').textContent = `$${price.toFixed(4)}`;
+                document.getElementById('display-current-price').textContent = `$${price.toFixed(4)}`;
+                document.getElementById('display-mark-price').textContent = `시장평균: $${mark.toFixed(4)}`;
+            }
+
+            const change24El = document.getElementById('header-24h');
+            const c24 = marketData.priceChangePercent;
+            change24El.textContent = `${c24 >= 0 ? '+' : ''}${c24.toFixed(2)}%`;
+            change24El.className = `font-mono text-xs font-medium ${c24 >= 0 ? 'text-binance-green' : 'text-binance-red'}`;
+
+            // Update Position Badges
+            const badgeSide = document.getElementById('badge-side');
+            if (position.side === 'SHORT') {
+                badgeSide.textContent = 'SHORT 숏';
+                badgeSide.className = 'px-2.5 py-1 rounded-lg text-xs font-bold tracking-wide bg-binance-red/20 text-binance-red border border-binance-red/30';
+            } else {
+                badgeSide.textContent = 'LONG 롱';
+                badgeSide.className = 'px-2.5 py-1 rounded-lg text-xs font-bold tracking-wide bg-binance-green/20 text-binance-green border border-binance-green/30';
+            }
+
+            document.getElementById('badge-leverage').textContent = `격리 ${position.leverage}x`;
+            document.getElementById('summary-entry').textContent = `$${position.entryPrice.toFixed(4)}`;
+            document.getElementById('gauge-entry-label').textContent = `$${position.entryPrice.toFixed(4)}`;
+
+            // Calculate ROE & PnL
+            const metrics = calculateMetrics(price, position.entryPrice, position.leverage, position.margin, position.side);
+
+            const roeEl = document.getElementById('display-roe');
+            const pnlEl = document.getElementById('display-pnl');
+            const pnlKrwEl = document.getElementById('display-pnl-krw');
+            const diffEl = document.getElementById('display-price-diff');
+            const glowEl = document.getElementById('hero-glow');
+
+            if (price > 0) {
+                const sign = metrics.roe >= 0 ? '+' : '';
+                roeEl.textContent = `${sign}${metrics.roe.toFixed(2)}%`;
+                pnlEl.textContent = `${sign}${metrics.pnl.toFixed(2)} USDT`;
+
+                const krwVal = Math.round(metrics.pnl * APPROX_KRW_RATE);
+                pnlKrwEl.textContent = `≈ ${krwVal >= 0 ? '+' : ''}${krwVal.toLocaleString('ko-KR')} 원`;
+
+                const diffSign = metrics.priceDiffPct >= 0 ? '+' : '';
+                diffEl.textContent = `진입가 대비 ${diffSign}${metrics.priceDiffPct.toFixed(2)}%`;
+
+                if (metrics.roe > 0) {
+                    roeEl.className = 'font-mono text-4xl sm:text-6xl font-extrabold tracking-tight text-binance-green transition-colors duration-200';
+                    pnlEl.className = 'font-mono text-lg sm:text-xl font-bold text-binance-green';
+                    glowEl.className = 'absolute -right-20 -top-20 w-72 h-72 rounded-full bg-binance-green/10 blur-3xl pointer-events-none transition-colors duration-500';
+                } else if (metrics.roe < 0) {
+                    roeEl.className = 'font-mono text-4xl sm:text-6xl font-extrabold tracking-tight text-binance-red transition-colors duration-200';
+                    pnlEl.className = 'font-mono text-lg sm:text-xl font-bold text-binance-red';
+                    glowEl.className = 'absolute -right-20 -top-20 w-72 h-72 rounded-full bg-binance-red/10 blur-3xl pointer-events-none transition-colors duration-500';
+                } else {
+                    roeEl.className = 'font-mono text-4xl sm:text-6xl font-extrabold tracking-tight text-binance-text transition-colors duration-200';
+                    pnlEl.className = 'font-mono text-lg sm:text-xl font-bold text-binance-text';
+                }
+
+                // Update Liquidation Display
+                document.getElementById('display-liq-price').textContent = `$${metrics.liqPrice.toFixed(4)}`;
+                const distEl = document.getElementById('liq-distance');
+                if (metrics.liqDistancePct <= 0) {
+                    distEl.textContent = '청산 도달!';
+                    distEl.className = 'text-[11px] font-mono font-bold text-binance-red';
+                } else {
+                    distEl.textContent = `${metrics.liqDistancePct.toFixed(1)}% 여유`;
+                    distEl.className = `text-[11px] font-mono ${metrics.liqDistancePct < 5 ? 'text-binance-red font-bold' : 'text-binance-yellow'}`;
+                }
+
+                // Update Visual Gauge Bar (-100% ROE on right/danger, +100% ROE on left/profit)
+                updateGaugeBar(metrics.roe);
+            }
+
+            // Update Position Details Breakdown
+            const notional = position.margin * position.leverage;
+            const qty = position.entryPrice > 0 ? notional / position.entryPrice : 0;
+            const feeBuffer = position.entryPrice * 0.001; // ~0.1% roundtrip taker fee
+            const breakeven = position.side === 'SHORT'
+                ? position.entryPrice - feeBuffer
+                : position.entryPrice + feeBuffer;
+
+            document.getElementById('position-size-label').textContent = `규모: ${notional.toLocaleString('en-US', { maximumFractionDigits: 0 })} USDT`;
+            document.getElementById('detail-notional').textContent = `${notional.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`;
+            document.getElementById('detail-qty').textContent = `${qty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} FIL`;
+            document.getElementById('detail-breakeven').textContent = `$${Math.max(0, breakeven).toFixed(4)}`;
+
+            // Refresh Simulator
+            calculateTargetSim();
+        }
+
+        function updateGaugeBar(roe) {
+            const bar = document.getElementById('roe-progress-bar');
+            // Center is 50%. Profit extends left (towards 0%), Loss extends right (towards 100% liquidation)
+            const clampedRoe = Math.max(-100, Math.min(100, roe));
+            if (clampedRoe >= 0) {
+                const widthPct = (clampedRoe / 100) * 50;
+                bar.style.width = `${widthPct}%`;
+                bar.style.marginLeft = `${50 - widthPct}%`;
+                bar.className = 'h-full bg-binance-green transition-all duration-300 rounded-l-full';
+            } else {
+                const widthPct = (Math.abs(clampedRoe) / 100) * 50;
+                bar.style.width = `${widthPct}%`;
+                bar.style.marginLeft = '50%';
+                bar.className = 'h-full bg-binance-red transition-all duration-300 rounded-r-full';
+            }
+        }
+
+        // ==========================================
+        // 5. User Interaction Handlers
+        // ==========================================
+        function setSide(newSide) {
+            position.side = newSide;
+            updateSideButtonsUI();
+            saveState();
+            updateDashboard();
+        }
+
+        function updateSideButtonsUI() {
+            const btnShort = document.getElementById('btn-side-short');
+            const btnLong = document.getElementById('btn-side-long');
+            if (position.side === 'SHORT') {
+                btnShort.className = 'py-2.5 rounded-lg text-sm font-bold transition bg-binance-red text-white shadow';
+                btnLong.className = 'py-2.5 rounded-lg text-sm font-bold transition text-binance-subtext hover:text-binance-text';
+            } else {
+                btnLong.className = 'py-2.5 rounded-lg text-sm font-bold transition bg-binance-green text-black shadow';
+                btnShort.className = 'py-2.5 rounded-lg text-sm font-bold transition text-binance-subtext hover:text-binance-text';
+            }
+        }
+
+        function handleInputChange() {
+            const entryVal = parseFloat(document.getElementById('input-entry').value);
+            const marginVal = parseFloat(document.getElementById('input-margin').value);
+
+            if (!isNaN(entryVal) && entryVal > 0) {
+                position.entryPrice = entryVal;
+            }
+            if (!isNaN(marginVal) && marginVal >= 0) {
+                position.margin = marginVal;
+            }
+
+            saveState();
+            updateDashboard();
+        }
+
+        function syncLeverageFromSlider() {
+            const val = parseInt(document.getElementById('slider-leverage').value, 10);
+            document.getElementById('input-leverage').value = val;
+            position.leverage = val;
+            saveState();
+            updateDashboard();
+        }
+
+        function syncLeverageFromInput() {
+            let val = parseInt(document.getElementById('input-leverage').value, 10);
+            if (isNaN(val)) return;
+            val = Math.max(1, Math.min(75, val));
+            document.getElementById('slider-leverage').value = val;
+            position.leverage = val;
+            saveState();
+            updateDashboard();
+        }
+
+        function setLeveragePreset(val) {
+            position.leverage = val;
+            document.getElementById('input-leverage').value = val;
+            document.getElementById('slider-leverage').value = val;
+            saveState();
+            updateDashboard();
+        }
+
+        function resetToFriendDefault() {
+            position = { ...DEFAULT_STATE };
+            syncInputsWithState();
+            saveState();
+            updateDashboard();
+            showToast('초기 포지션(0.5541 USDT / 8배 숏)으로 복원되었습니다.');
+        }
+
+        // Manual Price Mode
+        function toggleManualMode() {
+            const checked = document.getElementById('toggle-manual-price').checked;
+            const box = document.getElementById('manual-price-box');
+            marketData.isManual = checked;
+
+            if (checked) {
+                box.classList.remove('hidden');
+                cleanupConnections();
+                updateConnectionStatus('MANUAL', '수동 시세 모드');
+                const input = document.getElementById('input-manual-price');
+                if (!input.value && marketData.lastPrice > 0) {
+                    input.value = marketData.lastPrice.toFixed(4);
+                }
+            } else {
+                box.classList.add('hidden');
+                reconnectBinance();
+            }
+        }
+
+        function handleManualPriceInput() {
+            const val = parseFloat(document.getElementById('input-manual-price').value);
+            if (!isNaN(val) && val > 0) {
+                marketData.lastPrice = val;
+                marketData.markPrice = val;
+                updateDashboard();
+            }
+        }
+
+        function reconnectBinance() {
+            document.getElementById('toggle-manual-price').checked = false;
+            document.getElementById('manual-price-box').classList.add('hidden');
+            marketData.isManual = false;
+            fetchInitialBinanceData();
+            connectBinanceWebSocket();
+            showToast('바이낸스 실시간 시세 서버에 재연결합니다.');
+        }
+
+        // ==========================================
+        // 6. Target Price Simulator
+        // ==========================================
+        function adjustTargetPercent(pct) {
+            const base = position.entryPrice || 0.5541;
+            const newTarget = base * (1 + pct / 100);
+            document.getElementById('input-target-price').value = newTarget.toFixed(4);
+            calculateTargetSim();
+        }
+
+        function calculateTargetSim() {
+            const targetVal = parseFloat(document.getElementById('input-target-price').value);
+            if (!isNaN(targetVal) && targetVal > 0) {
+                position.targetPrice = targetVal;
+                saveState();
+            } else {
+                return;
+            }
+
+            const sim = calculateMetrics(targetVal, position.entryPrice, position.leverage, position.margin, position.side);
+            const roeEl = document.getElementById('sim-roe');
+            const pnlEl = document.getElementById('sim-pnl');
+            const changeEl = document.getElementById('sim-price-change');
+
+            const sign = sim.roe >= 0 ? '+' : '';
+            roeEl.textContent = `${sign}${sim.roe.toFixed(2)}%`;
+            pnlEl.textContent = `${sign}${sim.pnl.toFixed(2)} USDT`;
+
+            const diffSign = sim.priceDiffPct >= 0 ? '+' : '';
+            changeEl.textContent = `${diffSign}${sim.priceDiffPct.toFixed(2)}%`;
+
+            const colorClass = sim.roe >= 0 ? 'text-binance-green' : 'text-binance-red';
+            roeEl.className = `font-mono text-xl font-extrabold ${colorClass}`;
+            pnlEl.className = `font-mono text-sm font-bold ${colorClass}`;
+        }
+
+        // ==========================================
+        // 7. DCA (물타기/불타기) Modal Logic
+        // ==========================================
+        function openDcaModal() {
+            document.getElementById('dca-cur-entry').textContent = `$${position.entryPrice.toFixed(4)}`;
+            document.getElementById('dca-cur-margin').textContent = `${position.margin.toLocaleString('en-US')} USDT`;
+            
+            const addPriceInput = document.getElementById('dca-add-price');
+            if (marketData.lastPrice > 0) {
+                addPriceInput.value = marketData.lastPrice.toFixed(4);
+            }
+            document.getElementById('dca-add-margin').value = '';
+            previewDca();
+
+            const modal = document.getElementById('dca-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeDcaModal() {
+            const modal = document.getElementById('dca-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function fillCurrentPriceToDca() {
+            if (marketData.lastPrice > 0) {
+                document.getElementById('dca-add-price').value = marketData.lastPrice.toFixed(4);
+                previewDca();
+            }
+        }
+
+        function computeWeightedAverage() {
+            const addPrice = parseFloat(document.getElementById('dca-add-price').value);
+            const addMargin = parseFloat(document.getElementById('dca-add-margin').value);
+
+            if (isNaN(addPrice) || addPrice <= 0 || isNaN(addMargin) || addMargin <= 0) {
+                return { newEntry: position.entryPrice, newMargin: position.margin, valid: false };
+            }
+
+            // Contract quantity = (Margin * Leverage) / Price
+            // Since Leverage is identical across the position, Leverage cancels out in weighted average:
+            // New Avg Price = (Margin1 + Margin2) / ((Margin1 / Price1) + (Margin2 / Price2))
+            const curMargin = position.margin > 0 ? position.margin : 1000;
+            const curQty = curMargin / position.entryPrice;
+            const addQty = addMargin / addPrice;
+
+            const totalMargin = curMargin + addMargin;
+            const totalQty = curQty + addQty;
+            const newEntry = totalMargin / totalQty;
+
+            return { newEntry, newMargin: totalMargin, valid: true };
+        }
+
+        function previewDca() {
+            const res = computeWeightedAverage();
+            document.getElementById('dca-new-entry').textContent = `$${res.newEntry.toFixed(4)}`;
+            document.getElementById('dca-new-margin').textContent = `${res.newMargin.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT`;
+        }
+
+        function applyDca() {
+            const res = computeWeightedAverage();
+            if (!res.valid) {
+                showToast('추가 진입 가격과 증거금을 올바르게 입력해주세요.', true);
+                return;
+            }
+
+            position.entryPrice = parseFloat(res.newEntry.toFixed(4));
+            position.margin = parseFloat(res.newMargin.toFixed(2));
+
+            syncInputsWithState();
+            saveState();
+            updateDashboard();
+            closeDcaModal();
+            showToast(`새 평단가 $${position.entryPrice.toFixed(4)} 및 증거금이 반영되었습니다!`);
+        }
+
+        // ==========================================
+        // 8. Custom Toast Helper (No alert() used)
+        // ==========================================
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl border text-xs sm:text-sm font-medium shadow-xl transition-all duration-300 transform translate-y-0 ${
+                isError 
+                    ? 'bg-binance-card border-binance-red text-binance-red' 
+                    : 'bg-binance-card border-binance-yellow/50 text-binance-text'
+            }`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-8px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ==========================================
+        // 9. Bootstrap on Window Load
+        // ==========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            updateDashboard();
+            fetchInitialBinanceData();
+            connectBinanceWebSocket();
+        });
+    </script>
+</body>
+</html>
